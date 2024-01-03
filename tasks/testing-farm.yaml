@@ -54,10 +54,8 @@ spec:
 
         export TESTING_FARM_API_TOKEN=$(cat /etc/secrets/testing-farm-token)
 
-        (echo -n "SNAPSHOT: '"; echo -n "${SNAPSHOT}"; echo -n "'") > env.yaml
-
         testing-farm request \
-          --environment-file=env.yaml \
+          --environment SNAPSHOT="${SNAPSHOT}" \
           --git-url "${GIT_URL}" \
           --git-ref "${GIT_REF}" \
           --compose "${COMPOSE}" \
