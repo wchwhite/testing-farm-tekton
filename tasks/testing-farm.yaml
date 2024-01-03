@@ -55,9 +55,9 @@ spec:
         export TESTING_FARM_API_TOKEN=$(cat /etc/secrets/testing-farm-token)
 
         testing-farm request \
-          --environment SNAPSHOT=${SNAPSHOT} \
-          --git-url ${GIT_URL} \
-          --git-ref ${GIT_REF} \
-          --compose ${COMPOSE} \
-          --arch ${ARCH} \
-          --timeout ${TIMEOUT}
+          --environment SNAPSHOT="${SNAPSHOT}" \
+          --git-url "${GIT_URL}" \
+          --git-ref "${GIT_REF}" \
+          --compose "${COMPOSE}" \
+          --arch "${ARCH}" \
+          --timeout "${TIMEOUT}"
