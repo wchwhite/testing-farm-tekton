@@ -55,7 +55,7 @@ spec:
         export TESTING_FARM_API_TOKEN=$(cat /etc/secrets/testing-farm-token)
 
         testing-farm request \
-          --environment SNAPSHOT="${SNAPSHOT}" \
+          --environment SNAPSHOT="$(echo ${SNAPSHOT} | base64 -w 0)" \
           --git-url "${GIT_URL}" \
           --git-ref "${GIT_REF}" \
           --compose "${COMPOSE}" \
