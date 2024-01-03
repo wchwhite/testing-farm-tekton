@@ -52,7 +52,7 @@ spec:
       script: |
         #!/usr/bin/env bash
 
-        TESTING_FARM_API_TOKEN=$(cat /etc/secrets/testing-farm-token)
+        export TESTING_FARM_API_TOKEN=$(cat /etc/secrets/testing-farm-token)
 
         testing-farm request \
           --environment SNAPSHOT=${SNAPSHOT} \
