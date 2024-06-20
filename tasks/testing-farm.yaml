@@ -42,9 +42,6 @@ spec:
     - name: imagerepository-for-varnish-6-mvp-varnish-6-mvp-image-pull
       secret:
         secretName: imagerepository-for-varnish-6-mvp-varnish-6-mvp-image-pull
-    - name: interim-gitlab-token
-      secret:
-        secretName: interim-gitlab-token
   steps:
     - image: quay.io/testing-farm/cli:latest
       volumeMounts:
@@ -53,9 +50,6 @@ spec:
           readOnly: true
         - name: imagerepository-for-varnish-6-mvp-varnish-6-mvp-image-pull
           mountPath: "/etc/secrets/imagerepository-for-varnish-6-mvp-varnish-6-mvp-image-pull"
-          readOnly: true
-        - name: interim-gitlab-token
-          mountPath: "/etc/secrets/interim-gitlab-token"
           readOnly: true
       env:
         - name: SNAPSHOT
@@ -77,12 +71,10 @@ spec:
       script: |
             #!/usr/bin/env bash
             export TESTING_FARM_API_TOKEN=$(cat /etc/secrets/testing-farm-secret/testing-farm-token)
-            export GITLAB_TOKEN="$(cat /etc/secrets/interim-gitlab-token/token)"
 
             # Prepare secrets for testing farm
             secrets_file=$(mktemp)
             echo "AUTHFILE_b64: \"$(base64 -w 0 /etc/secrets/imagerepository-for-varnish-6-mvp-varnish-6-mvp-image-pull/.dockerconfigjson)\"" >> $secrets_file
-            echo "GITLAB_TOKEN: \"$GITLAB_TOKEN\"" >> $secrets_file
 
             if [[ -z "$GIT_URL" ]]; then
               GIT_URL=$(python3 -c "import os; import json; print(json.loads(os.environ['SNAPSHOT'])['components'][0]['source']['git']['url'])")
@@ -91,9 +83,6 @@ spec:
             if [[ -z "$GIT_REF" ]]; then
               GIT_REF=$(python3 -c "import os; import json; print(json.loads(os.environ['SNAPSHOT'])['components'][0]['source']['git']['revision'])")
             fi
-
-            # Inject token, otherwise testing farm can't clone the repo
-            GIT_URL="$(echo "$GIT_URL" | sed "s;/\(gitlab.com\);\/token:$GITLAB_TOKEN@\1;")"
 
             context_file=$(mktemp)
             echo 'trigger: commit' > $context_file
