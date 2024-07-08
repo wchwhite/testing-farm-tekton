@@ -7,6 +7,11 @@ spec:
   params:
     - name: SNAPSHOT
       description: A list of container images that should undergo testing
+    - name: PULL_SECRET_NAME
+      description: Image pull secret to inject into the Testing Farm jobs
+    - name: TESTING_FARM_TOKEN_SECRET_NAME
+      default: "testing-farm-secret"
+      description: Name of the Key/Value secret with testing-farm-token key
     - name: GIT_URL
       default: ""
       description: URL of the GIT repository that contains the tests.
@@ -38,18 +43,18 @@ spec:
   volumes:
     - name: testing-farm-secret
       secret:
-        secretName: testing-farm-secret
-    - name: imagerepository-for-varnish-6-mvp-varnish-6-mvp-image-pull
+        secretName: "$(params.TESTING_FARM_TOKEN_SECRET_NAME)"
+    - name: pull-secret-volume
       secret:
-        secretName: imagerepository-for-varnish-6-mvp-varnish-6-mvp-image-pull
+        secretName: "$(params.PULL_SECRET_NAME)"
   steps:
     - image: quay.io/testing-farm/cli:latest
       volumeMounts:
         - name: testing-farm-secret
           mountPath: "/etc/secrets/testing-farm-secret"
           readOnly: true
-        - name: imagerepository-for-varnish-6-mvp-varnish-6-mvp-image-pull
-          mountPath: "/etc/secrets/imagerepository-for-varnish-6-mvp-varnish-6-mvp-image-pull"
+        - name: pull-secret-volume
+          mountPath: "/etc/secrets/pull-secret-volume"
           readOnly: true
       env:
         - name: SNAPSHOT
@@ -74,7 +79,7 @@ spec:
 
             # Prepare secrets for testing farm
             secrets_file=$(mktemp)
-            echo "AUTHFILE_b64: \"$(base64 -w 0 /etc/secrets/imagerepository-for-varnish-6-mvp-varnish-6-mvp-image-pull/.dockerconfigjson)\"" >> $secrets_file
+            echo "AUTHFILE_b64: \"$(base64 -w 0 /etc/secrets/pull-secret-volume/.dockerconfigjson)\"" >> $secrets_file
 
             if [[ -z "$GIT_URL" ]]; then
               GIT_URL=$(python3 -c "import os; import json; print(json.loads(os.environ['SNAPSHOT'])['components'][0]['source']['git']['url'])")
