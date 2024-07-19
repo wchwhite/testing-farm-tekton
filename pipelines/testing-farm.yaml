@@ -7,7 +7,7 @@ spec:
     Secrets to provide:
       Key/value with key `testing-farm-token` containing the testing-farm API token.
       Provide name of this secret as `TESTING_FARM_TOKEN_SECRET_NAME` parameter.
-      
+
       Pull secret to the registry used by SNAPSHOT.
       Provide name of this secret as `PULL_SECRET_NAME` parameter.
 
@@ -22,7 +22,7 @@ spec:
       description: Image pull secret to inject into the Testing Farm jobs
     - name: TESTING_FARM_TOKEN_SECRET_NAME
       default: "testing-farm-secret"
-      description: Name of the Key/Value secret with testing-farm-token key      
+      description: Name of the Key/Value secret with testing-farm-token key
     - name: GIT_URL
       default: ""
       description: URL of the GIT repository that contains the tests.
@@ -31,7 +31,7 @@ spec:
       description: Branch of the git repository used containing the tests
     - name: TMT_PLAN
       default: "."
-      description: Name filter for plans defined in the repo.      
+      description: Name filter for plans defined in the repo.
     - name: COMPOSE
       default: "Fedora-40"
       description: Compose to use for the system-under-test.
@@ -46,11 +46,11 @@ spec:
       description: The testing-farm instance API to use
   results:
     - name: REQUEST_URL
-      value: "$(tasks.testing-farm.results.REQUEST_URL)"      
+      value: "$(tasks.testing-farm.results.REQUEST_URL)"
     - name: ARTIFACTS_URL
-      value: "$(tasks.testing-farm.results.ARTIFACTS_URL)"      
+      value: "$(tasks.testing-farm.results.ARTIFACTS_URL)"
     - name: TEST_OUTPUT
-      value: "$(tasks.testing-farm.results.TEST_OUTPUT)"      
+      value: "$(tasks.testing-farm.results.TEST_OUTPUT)"
   tasks:
     - name: testing-farm
       timeout: "5h"
@@ -84,3 +84,5 @@ spec:
           value: $(params.TIMEOUT)
         - name: TESTING_FARM_API_URL
           value: $(params.TESTING_FARM_API_URL)
+  timeouts:
+    pipeline: "7h"
