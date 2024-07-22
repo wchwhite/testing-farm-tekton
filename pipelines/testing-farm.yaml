@@ -84,5 +84,3 @@ spec:
           value: $(params.TIMEOUT)
         - name: TESTING_FARM_API_URL
           value: $(params.TESTING_FARM_API_URL)
-  timeouts:
-    pipeline: "7h"
