@@ -1,17 +1,15 @@
 apiVersion: tekton.dev/v1
 kind: Task
 metadata:
-  name: testing-farm
+  name: tf-scheduler
 spec:
-  description: Initiate testing-farm test given a list of container images
+  description: >-
+
+    Run tmt plan via Testing Farm.
   params:
-    - name: SNAPSHOT
-      description: A list of container images that should undergo testing
     - name: PULL_SECRET_NAME
-      description: Image pull secret to inject into the Testing Farm jobs
     - name: TESTING_FARM_TOKEN_SECRET_NAME
-      default: "testing-farm-secret"
-      description: Name of the Key/Value secret with testing-farm-token key
+    - name: SNAPSHOT
     - name: GIT_URL
       default: ""
       description: URL of the GIT repository that contains the tests.
@@ -33,28 +31,24 @@ spec:
     - name: TESTING_FARM_API_URL
       default: https://api.dev.testing-farm.io/v0.1
       description: The testing-farm instance API to use
-  results:
-    - description: Link to track the request
-      name: REQUEST_URL
-    - description: Link to the Testing Farm result overview  
-      name: ARTIFACTS_URL
-    - description: Test outcome
-      name: TEST_OUTPUT
   volumes:
-    - name: testing-farm-secret
-      secret:
-        secretName: "$(params.TESTING_FARM_TOKEN_SECRET_NAME)"
     - name: pull-secret-volume
       secret:
         secretName: "$(params.PULL_SECRET_NAME)"
+    - name: testing-farm-secret
+      secret:
+        secretName: "$(params.TESTING_FARM_TOKEN_SECRET_NAME)"
+  results:
+    - name: tf-request
   steps:
-    - image: quay.io/testing-farm/cli:latest
+    - name: scheduler
+      image: quay.io/testing-farm/cli:latest
       volumeMounts:
-        - name: testing-farm-secret
-          mountPath: "/etc/secrets/testing-farm-secret"
-          readOnly: true
         - name: pull-secret-volume
           mountPath: "/etc/secrets/pull-secret-volume"
+          readOnly: true
+        - name: testing-farm-secret
+          mountPath: "/etc/secrets/testing-farm-secret"
           readOnly: true
       env:
         - name: SNAPSHOT
@@ -72,7 +66,7 @@ spec:
         - name: TESTING_FARM_API_URL
           value: $(params.TESTING_FARM_API_URL)
         - name: TMT_PLAN
-          value: $(params.TMT_PLAN)
+          value: $(params.TMT_PLAN)      
         - name: PULL_REQUEST_NUMBER
           valueFrom:
             fieldRef:
@@ -89,6 +83,10 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.labels['test.appstudio.openshift.io/scenario']
+        - name: COMPONENT
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.labels['appstudio.openshift.io/component']              
       script: |
             #!/usr/bin/env bash
             export TESTING_FARM_API_TOKEN=$(cat /etc/secrets/testing-farm-secret/testing-farm-token)
@@ -97,8 +95,15 @@ spec:
             secrets_file=$(mktemp)
             echo "AUTHFILE_b64: \"$(base64 -w 0 /etc/secrets/pull-secret-volume/.dockerconfigjson)\"" >> $secrets_file
 
+            set -x
+            # SNAPSHOT can contain multiple components, we are interested only in the one for 'COMPONENT'
+            _git_url=$(python3 -c "import os; import json; print([v for v in json.loads(os.environ['SNAPSHOT'])['components'] if v['name'] == '$COMPONENT'][0]['source']['git']['url'])")
+            _git_ref=$(python3 -c "import os; import json; print([v for v in json.loads(os.environ['SNAPSHOT'])['components'] if v['name'] == '$COMPONENT'][0]['source']['git']['revision'])")
+            _image_url=$(python3 -c "import os; import json; print([v for v in json.loads(os.environ['SNAPSHOT'])['components'] if v['name'] == '$COMPONENT'][0]['containerImage'])")
+            _image_name=$COMPONENT
+
             if [[ -z "$GIT_URL" ]]; then
-              GIT_URL=$(python3 -c "import os; import json; print(json.loads(os.environ['SNAPSHOT'])['components'][0]['source']['git']['url'])")
+              GIT_URL=$_git_url
             fi
 
             # Respect explicit input
@@ -113,15 +118,11 @@ spec:
                     GIT_REF="pull/$PULL_REQUEST_NUMBER/head"
                     ;;
                   *)
-                    echo Unknown git_provider=$GIT_PROVIDER, leaving git-ref untouched.
+                    echo Unknown git_provider=$GIT_PROVIDER, use 'revision' as GIT_REF
+                    GIT_REF=$_git_ref
                     ;;
                 esac
               fi
-            fi
-            # Previous branch might not fill it
-            if [[ -z "$GIT_REF" ]]; then
-              # Gather ref from SNAPSHOT itself
-              GIT_REF=$(python3 -c "import os; import json; print(json.loads(os.environ['SNAPSHOT'])['components'][0]['source']['git']['revision'])")
             fi
 
             context_file=$(mktemp)
@@ -139,11 +140,12 @@ spec:
             fi
 
             tf_log=$(mktemp)
-            
-            declare -p SNAPSHOT
+                        
             testing-farm request \
                 --secret @$secrets_file \
                 --environment SNAPSHOT_b64="$(echo ${SNAPSHOT} | base64 -w 0)" \
+                --environment IMAGE_URL="$_image_url" \
+                --environment IMAGE_NAME="$_image_name" \
                 --plan "${TMT_PLAN}" \
                 --context @$context_file \
                 --git-url "${GIT_URL}" \
@@ -152,28 +154,6 @@ spec:
                 --arch "${ARCH}" \
                 --timeout "${TIMEOUT}" \
                 --no-wait |& tee $tf_log
-            
-            echo "scheduled, now proceeding to wait on TF to finish its job"
-                
-            # we cannot use --wait as tf cli suffer https://issues.redhat.com/browse/TFT-2604
-            request_url=$(grep -oE "${TESTING_FARM_API_URL}.*$" $tf_log)
-            echo "${request_url}" > $(results.REQUEST_URL.path)
-            
-            watcher=$(mktemp)
-            parser=$(mktemp)
-            
-            request_outcome=$(mktemp)
-            
-            echo "Will be checking $request_url ..."
-            
-            # Fetch helper scripts (no curl here...)
-            wget -q https://raw.githubusercontent.com/lukaszachy/testing-farm-tekton/main/scripts/tf-watch.py -O $watcher
-            wget -q https://raw.githubusercontent.com/lukaszachy/testing-farm-tekton/main/scripts/tf-parse.py -O $parser
 
-            # Watch until request finishes
-            python3 $watcher $request_url $request_outcome
-            
-            # Parse and make the output
-            python3 $parser $request_outcome $(results.ARTIFACTS_URL.path) $(results.TEST_OUTPUT.path)
-            
-            
+            request_url=$(grep -oE "${TESTING_FARM_API_URL}.*$" $tf_log)
+            echo -n "${request_url}" > $(results.tf-request.path)
