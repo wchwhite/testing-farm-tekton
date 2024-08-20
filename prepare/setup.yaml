@@ -1,0 +1,48 @@
+---
+- name: Companion to the pipeline for easier setup
+  hosts: all
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Install required packages
+      ansible.builtin.dnf:
+        name:
+          - python3
+          - podman-docker
+          - podman
+        state: latest
+    - name: Suppress podman-docker message
+      ansible.builtin.file:
+        path: /etc/containers/nodocker
+        state: touch
+    - name: Add auth_file, pull the image and tag it
+      block:
+        - ansible.builtin.tempfile:
+            state: file
+            prefix: auth_file_
+            path: /var/tmp
+          register: auth_file
+        - ansible.builtin.copy:
+            dest: "{{ auth_file.path }}"
+            content: "{{ AUTHFILE_b64 | b64decode }}"
+        - ansible.builtin.lineinfile:
+            path: "{{TMT_PLAN_ENVIRONMENT_FILE}}"
+            create: yes
+            line: "REGISTRY_AUTH_FILE={{auth_file.path}}"
+          when: TMT_PLAN_ENVIRONMENT_FILE | length > 0
+        - ansible.builtin.command:
+            argv:
+              - podman
+              - pull
+              - --authfile
+              - "{{ auth_file.path }}"
+              - "{{ IMAGE_URL }}"
+          when: IMAGE_URL | length > 0
+        - ansible.builtin.command:
+            argv:
+              - podman
+              - tag
+              - "{{ IMAGE_URL }}"
+              - "{{ IMAGE_NAME }}"
+      when: AUTHFILE_b64 | length > 0

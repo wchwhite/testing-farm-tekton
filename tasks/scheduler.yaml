@@ -66,7 +66,7 @@ spec:
         - name: TESTING_FARM_API_URL
           value: $(params.TESTING_FARM_API_URL)
         - name: TMT_PLAN
-          value: $(params.TMT_PLAN)      
+          value: $(params.TMT_PLAN)
         - name: PULL_REQUEST_NUMBER
           valueFrom:
             fieldRef:
@@ -86,7 +86,7 @@ spec:
         - name: COMPONENT
           valueFrom:
             fieldRef:
-              fieldPath: metadata.labels['appstudio.openshift.io/component']              
+              fieldPath: metadata.labels['appstudio.openshift.io/component']
       script: |
             #!/usr/bin/env bash
             export TESTING_FARM_API_TOKEN=$(cat /etc/secrets/testing-farm-secret/testing-farm-token)
@@ -140,7 +140,7 @@ spec:
             fi
 
             tf_log=$(mktemp)
-                        
+
             testing-farm request \
                 --secret @$secrets_file \
                 --environment SNAPSHOT_b64="$(echo ${SNAPSHOT} | base64 -w 0)" \
