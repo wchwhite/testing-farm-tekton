@@ -102,6 +102,20 @@ spec:
           value: "$(params.TESTING_FARM_TOKEN_SECRET_NAME)"
         - name: SNAPSHOT
           value: $(params.SNAPSHOT)
+        - name: GIT_URL
+          value: $(params.GIT_URL)
+        - name: TMT_PLAN
+          value: $(params.TMT_PLAN)
+        - name: GIT_REF
+          value: $(params.GIT_REF)
+        - name: COMPOSE
+          value: $(params.COMPOSE)
+        - name: ARCH
+          value: $(params.ARCH)
+        - name: TIMEOUT
+          value: $(params.TIMEOUT)
+        - name: TESTING_FARM_API_URL
+          value: $(params.TESTING_FARM_API_URL)
     - name: wait-for-results
       runAfter:
       - scheduler
