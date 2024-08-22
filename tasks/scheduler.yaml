@@ -122,6 +122,9 @@ spec:
                     GIT_REF=$_git_ref
                     ;;
                 esac
+              # "on-push" doesn't have pr/mr associated
+              else
+                GIT_REF=$_git_ref
               fi
             fi
 
