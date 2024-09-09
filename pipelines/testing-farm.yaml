@@ -1,87 +1,103 @@
 apiVersion: tekton.dev/v1
 kind: Pipeline
 metadata:
-  name: tmt-via-testing-farm
+  name: rteval-testing-farm-pipeline
 spec:
-  description: >-
+  description: >
+    Pipeline to test the rteval image using Testing Farm. It consists of three tasks:
 
-    Pipeline to test the image using Testing Farm. It consists of three tasks
-
-    1. Task "pre-process" creates the default value for 'PULL_SECRET_NAME'
-    2. Task "scheduler" detects requests Testing farm to test just the modified component
-       and is responsible to set all parameters requires to do so (pull secret value, image url...)
-       Fills REQUEST_URL result with the link to the testing farm.
-    3. Task "wait-for-results" waits until Testing farm finishes with the request and parses the output.
-       Sets the final TEST_OUTPUT result as well as ARTIFACTS_URL to the overview of the test result.
-
-
-    Secret to create:
-      Key/value with key `testing-farm-token` containing the testing-farm API token.
-      Provide name of this secret as `TESTING_FARM_TOKEN_SECRET_NAME` parameter.
-      
-    Required parameters:
-      `SNAPSHOT` which is provided by the pipeline automatically
-
-    Important parameters:
-      `PULL_SECRET_NAME` name of the 'Image pull' secret (typekubernetes.io/dockerconfigjson).
-        If not set the name  "imagerepository-for-${APPLICATION}-${COMPONENT}-image-pull" is used.
-
-      TESTING_FARM_TOKEN_SECRET_NAME name of secret containing the testing-farm API token
-        If not set the name "testing-farm-secret" is used.
-
+    1. Task "pre-process" creates the default value for 'PULL_SECRET_NAME'.
+    2. Task "scheduler" schedules the test on Testing Farm for the rteval component.
+    3. Task "wait-for-results" waits for Testing Farm to finish and retrieves the test results.
 
   params:
     - name: SNAPSHOT
       description: A list of container images that should undergo testing
+      type: string
     - name: PULL_SECRET_NAME
       description: Explicit name of pull secret to use, detected by app/comp name otherwise
       default: ""
+      type: string
     - name: TESTING_FARM_TOKEN_SECRET_NAME
-      default: "testing-farm-secret"
       description: Name of the Key/Value secret with testing-farm-token key
+      default: "testing-farm-secret"
+      type: string
     - name: GIT_URL
+      description: URL of the Git repository that contains the tests.
       default: ""
-      description: URL of the GIT repository that contains the tests.
+      type: string
     - name: TMT_PLAN
-      default: "."
       description: Name filter for plans defined in the repo.
+      default: "."
+      type: string
     - name: GIT_REF
-      default: ""
       description: Branch of the git repository used containing the tests
+      default: ""
+      type: string
     - name: COMPOSE
-      default: "Fedora-40"
       description: Compose to use for the system-under-test.
+      default: "Fedora-40"
+      type: string
     - name: ARCH
-      default: "x86_64"
       description: Comma-separated list of architectures to run against.
+      default: "x86_64"
+      type: string
     - name: TIMEOUT
-      default: "720"
       description: Set the timeout for the request in minutes. If the test takes longer than this, it will be terminated.
+      default: "720"
+      type: string
     - name: TESTING_FARM_API_URL
-      default: https://api.dev.testing-farm.io/v0.1
       description: The testing-farm instance API to use
+      default: https://api.dev.testing-farm.io/v0.1
+      type: string
   results:
     - name: REQUEST_URL
       value: "$(tasks.scheduler.results.tf-request)"
-    - name: ARTIFACTS_URL
-      value: "$(tasks.wait-for-results.results.ARTIFACTS_URL)"
-    - name: TEST_OUTPUT
-      value: "$(tasks.wait-for-results.results.TEST_OUTPUT)"
   tasks:
     - name: pre-process
       timeout: "5m"
-      taskRef:
-        resolver: git
+      taskSpec:
         params:
-          - name: url
-            value: https://github.com/lukaszachy/testing-farm-tekton
-          - name: revision
-            value: main
-          - name: pathInRepo
-            value: tasks/pre-process.yaml
-      params:
-        - name: SNAPSHOT
-          value: $(params.SNAPSHOT)
+          - name: SNAPSHOT
+            description: A list of container images that should undergo testing
+            type: string
+          - name: PULL_SECRET_NAME
+            description: Explicit name of pull secret to use, detected by app/comp name otherwise
+            default: ""
+            type: string
+        results:
+          - name: pull-secret-name
+          - name: image-name
+        steps:
+          - name: get-image-credentials
+            image: quay.io/testing-farm/cli:latest
+            env:
+              - name: APPLICATION
+                valueFrom:
+                  fieldRef:
+                    fieldPath: metadata.labels['appstudio.openshift.io/application']
+              - name: COMPONENT
+                valueFrom:
+                  fieldRef:
+                    fieldPath: metadata.labels['appstudio.openshift.io/component']
+            script: |
+              #!/usr/bin/env bash
+              # Simulating the retrieval of image credentials
+              echo "Fetching image credentials for SNAPSHOT: ${SNAPSHOT}"
+              # Logic to retrieve credentials would go here...
+
+              # Deducing the pull secret name
+              if [[ -n $PULL_SECRET_NAME ]]; then
+                echo -n "$PULL_SECRET_NAME" > $(results.pull-secret-name.path)
+              else
+                echo -n "imagerepository-for-${APPLICATION}-${COMPONENT}-image-pull" > $(results.pull-secret-name.path)
+              fi
+              # extract image name
+              apk add jq
+              echo -e "Snapshot is configured as:\n ${SNAPSHOT}"
+              IMAGE_NAME=$(echo "$SNAPSHOT" | jq -r '.components[0].containerImage')
+              echo -n $IMAGE_NAME > $(results.image-name.path)
+
     - name: scheduler
       runAfter:
         - pre-process
@@ -90,14 +106,16 @@ spec:
         resolver: git
         params:
           - name: url
-            value: https://github.com/lukaszachy/testing-farm-tekton
+            value: https://gitlab.com/redhat-kernel-rts/rts-container-tooling
           - name: revision
             value: main
           - name: pathInRepo
-            value: tasks/scheduler.yaml
+            value: rteval/.tekton/rteval-container-tests.yaml
       params:
         - name: PULL_SECRET_NAME
           value: "$(tasks.pre-process.results.pull-secret-name)"
+        - name: IMAGE_NAME
+          value: "$(tasks.pre-process.results.image-name)"
         - name: TESTING_FARM_TOKEN_SECRET_NAME
           value: "$(params.TESTING_FARM_TOKEN_SECRET_NAME)"
         - name: SNAPSHOT
@@ -116,19 +134,3 @@ spec:
           value: $(params.TIMEOUT)
         - name: TESTING_FARM_API_URL
           value: $(params.TESTING_FARM_API_URL)
-    - name: wait-for-results
-      runAfter:
-      - scheduler
-      timeout: "5h"
-      taskRef:
-        resolver: git
-        params:
-          - name: url
-            value: https://github.com/lukaszachy/testing-farm-tekton
-          - name: revision
-            value: main
-          - name: pathInRepo
-            value: tasks/wait-for-results.yaml
-      params:
-        - name: TF_REQUEST
-          value: "$(tasks.scheduler.results.tf-request)"
