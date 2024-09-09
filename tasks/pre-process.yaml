@@ -11,6 +11,7 @@ spec:
       default: ""
   results:
     - name: pull-secret-name
+    - name: image-name
   steps:
     - name: tf-pre-process
       image: quay.io/testing-farm/cli:latest
@@ -22,11 +23,18 @@ spec:
         - name: COMPONENT
           valueFrom:
             fieldRef:
-              fieldPath: metadata.labels['appstudio.openshift.io/component']          
+              fieldPath: metadata.labels['appstudio.openshift.io/component']
       script: |
-            #!/usr/bin/env bash
-            if [[ -n $PULL_SECRET_NAME ]]; then
-              echo -n "$PULL_SECRET_NAME" > $(results.pull-secret-name.path)
-            else
-              echo -n "imagerepository-for-${APPLICATION}-${COMPONENT}-image-pull" > $(results.pull-secret-name.path)
-            fi
+        #!/usr/bin/env bash
+        echo "Fetching image credentials for SNAPSHOT: ${SNAPSHOT}"
+        # Deducing the pull secret name
+        if [[ -n $PULL_SECRET_NAME ]]; then
+          echo -n "$PULL_SECRET_NAME" > $(results.pull-secret-name.path)
+        else
+          echo -n "imagerepository-for-${APPLICATION}-${COMPONENT}-image-pull" > $(results.pull-secret-name.path)
+        fi
+        # extract image name
+        apk add jq
+        echo -e "Snapshot is configured as:\n ${SNAPSHOT}"
+        IMAGE_NAME=$(echo "$SNAPSHOT" | jq -r '.components[0].containerImage')
+        echo -n $IMAGE_NAME > $(results.image-name.path)
